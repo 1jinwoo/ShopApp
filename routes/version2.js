@@ -6,6 +6,56 @@ const squel = require('squel');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
+// image upload
+const AWS = require('aws-sdk');
+const multer = require('multer');
+const multerS3 = require('multerS3');
+
+const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || 'shopapp-img';
+const IAM_USER_KEY = process.env.IAM_USER_KEY;
+const IAM_USER_SECRET = process.env.IAM_USER_SECRET;
+
+
+const s3bucket = new AWS.S3({
+    accessKeyId: IAM_USER_KEY,
+    secretAccessKey: IAM_USER_SECRET,
+    Bucket: BUCKET_NAME
+});
+
+
+const upload = multer({
+    storage: multerS3({
+        s3: s3bucket,
+        bucket: 'shopapp-img',
+        acl: 'public-read',
+        contentType: function(req, file, cb){
+            cb(null, file.mimetype);    
+        },
+        metadata: function (req, file, cb) {
+            cb(null, {fieldName: file.fieldname, 'Content-Type': file.mimetype, 'Cache_control': 'public, max-age=31536000'});
+        },
+        key: function (req, file, cb) {
+            if(req.customer_id == undefined && req.vendor_id){
+                cb(null, file.fieldname+ "/VENDOR"+ req.vendor_id + "_" +  getDateSerial()) 
+            }else if(req.vendor_id == undefined && req.customer_id){
+                cb(null, file.fieldname+ "/"+ req.username + "_" +  getDateSerial()) 
+            }else{
+                cb(null, file.fieldname+ "/ANON_" +  getDateSerial()) 
+            }
+        }
+    })
+});
+
+
+//sample upload using multer route adjusted to shopapp
+router.post('/upload', upload.array('photos', 3), function(req, res, next) {
+    for(index in req.files){
+        console.log(req.files[index]);
+    }
+    res.status(200).json({
+        result: req.body
+    });
+})
 
 //NO INSERT
 router.post('/api/login', function(req, res){
