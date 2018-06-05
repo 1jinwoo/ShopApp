@@ -469,4 +469,32 @@ function verifyToken(req, res, next){
 };
 
 
+function verifyVendorToken(req, res, next){
+    var bearerHeader = req.headers['authorization'];
+    if (typeof bearerHeader !== 'undefined'){
+        var bearer = bearerHeader.split(" ");
+        var bearerToken = bearer[1];
+        jwt.verify(bearerToken, process.env.VENDOR_SECRET_KEY, function(error, decoded) {
+            if(error){
+                res.status(403).json({
+                    auth: false,
+                    token: null
+                });
+            }
+            else{
+                req.vendor_username = decoded["vendor_username"];
+                req.vendor_id = decoded["vendor_id"];
+                req.vendor_name = decoded["vendor_name"];
+                next();
+            }
+        });
+    }else{
+        res.status(403).json({
+            auth: false,
+            token: null
+        });
+    }
+};
+
+
 module.exports = router;
