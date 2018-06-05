@@ -362,7 +362,7 @@ router.post('/api/vendor/register', function(req, res){
 });
 
 router.get('/all_products', function(req, res, next){
-    pool.getConnection(function(err,connection){
+    pool.getConnection(function(err, connection){
         if(err){
             if(typeof connection !== 'undefined'){
                 connection.release();
@@ -396,8 +396,9 @@ router.get('/all_products', function(req, res, next){
     });
 });
 
-router.post('/api/', function(req, res, next){
-    pool.getConnection(function(err,connection){
+
+router.put('/api/vendor/add_category', verifyVendorToken, function(req, res, next){
+    pool.getConnection(function(err, connection){
         if(err){
             if(typeof connection !== 'undefined'){
                 connection.release();
@@ -407,8 +408,9 @@ router.post('/api/', function(req, res, next){
             });
         }
         else{
-            var queryString = squel.select({separator:"\n"})
-                                   .from('products')
+            var queryString = squel.insert({separator:"\n"})
+                                   .into('categories')
+                                   .set('category_name', req.body.category_name)
                                    .toString();
             connection.query(queryString, function(error, results, fields){
                 if(error){
@@ -420,7 +422,7 @@ router.post('/api/', function(req, res, next){
                 }else{
                     connection.release();
                     res.status(200).json({
-                        message: "성공적으로 모든 상품들을 가져왔습니다.",
+                        message: "성공적으로 해당 카테고리를 추가했습니다",
                         results,
                         fields
                     });
@@ -495,6 +497,38 @@ function verifyVendorToken(req, res, next){
         });
     }
 };
+
+
+// numberToMoney(60000) returns "6만원" 
+// numberToMoney(60000007000) returns "600억7000원"
+function numberToMoney(number) {
+    var str = (+number).toString().trim();
+
+    if(str.length <= 4){
+        return str + '원';
+    }else if(str.length <= 8){
+        first_four = (+str.substr(-4)); // unary + removes preceding 0's
+        if(first_four == '0'){
+            first_four = '';
+        }
+        str = str.slice(0, -4);
+        return str + '만' + first_four + '원';
+    }else if(str.length <= 12){
+        first_four = (+str.substr(-4));
+        if(first_four == '0'){
+            first_four = '';
+        }
+        str = str.slice(0, -4);
+        second_four = (+str.substr(-4)) + '만';
+        if(second_four == '0만'){
+            second_four = '';
+        }
+        str = str.slice(0, -4);
+        return str + '억' + second_four + first_four + '원';
+    }else{
+        throw new Error("The number of digits cannot exceed 12. Try a smaller number");
+    }
+}
 
 
 module.exports = router;
