@@ -1,0 +1,41 @@
+{
+  "name": "shop_skeleton",
+  "version": "1.0.0",
+  "description": "skeleton code for shopping mall application",
+  "main": "server.js",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^1.18.3",
+    "compression": "^1.7.2",
+    "cookie-parser": "^1.4.3",
+    "cors": "^2.8.4",
+    "dotenv": "^5.0.1",
+    "eslint": "^4.19.1",
+    "express": "^4.16.3",
+    "helmet": "^3.12.1",
+    "jsonwebtoken": "^8.2.1",
+    "morgan": "^1.9.0",
+    "mysql": "^2.15.0",
+    "nodemon": "^1.17.5",
+    "path": "^0.12.7",
+    "squel": "^5.12.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clee8420/ShopApp.git"
+  },
+  "keywords": [
+    "Node"
+  ],
+  "author": "Max Jaeyoon Lee, Kun Woo Yoo, Jin Woo Won",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/clee8420/ShopApp/issues"
+  },
+  "homepage": "https://github.com/clee8420/ShopApp#readme"
+}
