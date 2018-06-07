@@ -9,7 +9,7 @@ const bcrypt = require('bcryptjs');
 // image upload
 const AWS = require('aws-sdk');
 const multer = require('multer');
-const multerS3 = require('multerS3');
+const multerS3 = require('multer-s3');
 
 const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || 'shopapp-img';
 const IAM_USER_KEY = process.env.IAM_USER_KEY;
@@ -48,7 +48,7 @@ const upload = multer({
 
 
 //sample upload using multer route adjusted to shopapp
-router.post('/upload', upload.array('photos', 3), function(req, res, next) {
+router.post('/upload', upload.array('photo', 3), function(req, res, next) {
     for(index in req.files){
         console.log(req.files[index]);
     }
@@ -578,6 +578,19 @@ function numberToMoney(number) {
     }else{
         throw new Error("The number of digits cannot exceed 12. Try a smaller number");
     }
+}
+
+// from zikigo
+function getDateSerial(){
+    var datetimenow = new Date(Date.now());
+    var year = datetimenow.getFullYear();
+    var month = datetimenow.getMonth()+1;
+    var date = datetimenow.getDate();
+
+    var hour = datetimenow.getHours();
+    var minute = datetimenow.getMinutes();
+    var second = datetimenow.getSeconds();
+    return ""+year+month+date+hour+minute+second;
 }
 
 
