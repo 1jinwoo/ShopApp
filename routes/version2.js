@@ -71,15 +71,12 @@ router.post('/api/login', function(req, res){
         });
     }
     else{
-        pool.getConnection(function(err, connection){
-            if(err){
+        pool.getConnection(function(error, connection){
+            if(error){
                 if(typeof connection !== 'undefined'){
                     connection.release();
                 }
-                res.status(500).json({
-                    error: err.message,
-                    stack: err.stack
-                });
+                next(error);
             }
             else{
                 var queryString = squel.select({separator: "\n"})
@@ -93,11 +90,7 @@ router.post('/api/login', function(req, res){
                 connection.query(queryString, function(error, results, fields){
                     connection.release();
                     if (error){
-                        res.status(500).json({
-                            status : "Query to the database has failed.",
-                            error_message: error.message,
-                            error_stack: error.stack
-                        });
+                        next(error);
                     } 
                     else{
                         if (!!results[0]){
@@ -106,9 +99,7 @@ router.post('/api/login', function(req, res){
                             if (passwordIsValid){
                                 jwt.sign({username: req.body.username, customer_id: results[0].customer_id, customer_first_name: results[0].customer_first_name}, process.env.USER_SECRET_KEY, {expiresIn: '7d'}, function(error, token){
                                     if (error){
-                                        res.status(500).json({
-                                            status: "Internal Server Error:Token Assignment Denied"
-                                        });
+                                        next(error);
                                     }
                                     else{
                                     res.status(200).json({
@@ -148,8 +139,8 @@ router.post('/api/register', function(req, res){
         "password":
         "customer_last_name":
         "customer_first_name":
-        "email":
-        "phone":
+        "customer_email":
+        "customer_phone":
         "address_line1":
         "address_line2": (optional)
         "city":
@@ -157,29 +148,26 @@ router.post('/api/register', function(req, res){
         "country":
     }
     */
-    if(!req.body.username || !req.body.password || !req.body.customer_last_name || !req.body.customer_first_name ||
-        !req.body.email || !req.body.phone || !req.body.address_line1 || !req.body.city ||
-        !req.body.postal_code || !req.body.country){
+    if(!req.body.username || !req.body.password || !req.body.customer_last_name || !req.body.customer_first_name  || !req.body.customer_phone || !req.body.customer_address_line1 || !req.body.customer_city ||
+        !req.body.customer_postal_code || !req.body.customer_country){
         res.status(401).json({
-            error_message: "REQUIRED FIELDS : (username, password, customer_last_name, customer_first_name, email, phone, address_line1, city, postal_code, country)",
+            error_message: "REQUIRED FIELDS : (username, password, customer_last_name, customer_first_name, customer_phone, customer_address_line1, customer_city, customer_postal_code, customer_country)",
             user_error_message: "필수 항목을 모두 입력하십시오."
         });
     }else if(req.body.username.length < 4 || req.body.username.length > 20 || req.body.password.length < 4 || req.body.password.length > 20 ||
-                req.body.phone.length > 20 || req.body.email.length > 30){
+                req.body.customer_phone.length > 20 || req.body.customer_email.length > 30){
         res.status(401).json({
             error_type: "Data Integrity Violation",
             error_message: "입력하신 파라미터 글자 숫자를 참고하세요: username(4~20), password(4~20), phone(~20), email(~30)"
         });
     }
     else{
-        pool.getConnection(function(err, connection){
-            if(err){
+        pool.getConnection(function(error, connection){
+            if(error){
                 if(typeof connection !== 'undefined'){
                     connection.release();
                 }
-                res.status(500).json({
-                    error: err.message
-                });
+                next(error);
             }
             else{
                 var hashedPassword = bcrypt.hashSync(req.body.password, parseInt(process.env.SALT_ROUNDS));
@@ -191,33 +179,23 @@ router.post('/api/register', function(req, res){
                                        .set('password', hashedPassword)
                                        .set('customer_last_name', req.body.customer_last_name)
                                        .set('customer_first_name', req.body.customer_first_name)
-                                       .set('email', req.body.email)
-                                       .set('phone', req.body.phone)
-                                       .set('address_line1', req.body.address_line1)
-                                       .set('address_line2', req.body.address_line2)
-                                       .set('city', req.body.city)
-                                       .set('postal_code', req.body.postal_code)
-                                       .set('country', req.body.country)
+                                       .set('customer_email', req.body.email)
+                                       .set('customer_phone', req.body.phone)
+                                       .set('customer_address_line1', req.body.address_line1)
+                                       .set('customer_address_line2', req.body.address_line2)
+                                       .set('customer_city', req.body.city)
+                                       .set('customer_postal_code', req.body.postal_code)
+                                       .set('customer_country', req.body.country)
                                        .toString();
                 connection.query(queryString, function(error, results, fields){
                     connection.release();
                     if (error){
-                        res.status(500).json({
-                            code : "QUERY_ERROR POST /api/register customer",
-                            auth: false,
-                            token: null,
-                            error_message: error.message,
-                            stack: error.stack
-                        });     
+                        next(error);    
                     }
                     else{
                         jwt.sign({username: req.body.username, customer_id: results.customer_id, customer_first_name: req.body.customer_first_name}, process.env.USER_SECRET_KEY, {expiresIn: '7d'}, function(error, token){
                             if (error){
-                                res.status(500).json({
-                                    code: "JWT_SIGN_ERROR POST /api/register 커스토머 사인",
-                                    auth: false,
-                                    token: null
-                                });
+                                next(error);
                             }
                             else{
                                 res.status(200).json({
@@ -236,58 +214,49 @@ router.post('/api/register', function(req, res){
 
 //NO INSERT
 router.post('/api/vendor/login', function(req, res){
-    if (!req.body.vendor_username || !req.body.password){
+    if (!req.body.vendor_username || !req.body.vendor_password){
         res.status(401).json({
             error_message: "REQUIRED FIELDS : (username, password)",
             user_error_message: "필수 항목을 모두 입력하십시오."
         });
     }
-    else if(req.body.vendor_username.length > 20 || req.body.vendor_username.length < 4 || req.body.password.length > 20 ||  req.body.password.length < 4){
+    else if(req.body.vendor_username.length > 20 || req.body.vendor_username.length < 4 || req.body.vendor_password.length > 20 ||  req.body.vendor_password.length < 4){
         res.status(401).json({
             error_type: "Data Integrity Violation",
             error_message: "입력하신 파라미터 글자 숫자를 참고하세요: vendor_username(4~20), password(4~20)"
         });
     }
     else{
-        pool.getConnection(function(err, connection){
-            if(err){
+        pool.getConnection(function(error, connection){
+            if(error){
                 if(typeof connection !== 'undefined'){
                     connection.release();
                 }
-                res.status(500).json({
-                    error: err.message,
-                    stack: err.stack
-                });
+                next(error);
             }
             else{
                 var queryString = squel.select({separator: "\n"})
                                     .from('vendors')
                                     .field('vendor_id')
-                                    .field('password')
+                                    .field('vendor_password')
                                     .field('vendor_name')
                                     .where('vendor_username = ?', req.body.vendor_username)
                                     .toString();
                 connection.query(queryString, function(error, results, fields){
                     connection.release();
                     if (error){
-                        res.status(500).json({
-                            status : "Query to the database has failed.",
-                            error_message: error.message,
-                            error_stack: error.stack
-                        });
+                        next(error);
                     } 
                     else{
                         if (!!results[0]){
                             console.log(results[0]);
+                            var password_stored = results[0].vendor_password;
                             console.log(password_stored);
-                            var password_stored = results[0].password;
-                            var passwordIsValid = bcrypt.compareSync(req.body.password, password_stored);
+                            var passwordIsValid = bcrypt.compareSync(req.body.vendor_password, password_stored);
                             if (passwordIsValid){
                                 jwt.sign({vendor_username: req.body.vendor_username, vendor_id: results[0].vendor_id, vendor_name: results[0].vendor_name}, process.env.VENDOR_SECRET_KEY, {expiresIn: '7d'}, function(error, token){
                                     if (error){
-                                        res.status(500).json({
-                                            status: "Internal Server Error:Token Assignment Denied"
-                                        });
+                                        next(error);
                                     }
                                     else{
                                     res.status(200).json({
@@ -319,81 +288,193 @@ router.post('/api/vendor/login', function(req, res){
     }
 });
 
-//ONE INSERT
-router.post('/api/vendor/register', function(req, res){
-    /*
-    {
-        "vendor_username":
-        "password":
-        "vendor_name":
-        "email":
-        "phone":
-        "address_line1":
-        "address_line2": (optional)
-        "city":
-        "postal_code":
-        "country":
-    }
-    */
-    if(!req.body.vendor_username || !req.body.password ||  !req.body.vendor_name ||
-        !req.body.email || !req.body.phone || !req.body.address_line1 || !req.body.city ||
-        !req.body.postal_code || !req.body.country){
+
+// Vendor: register new vendor data using hash function
+router.post('/api/vendor/register', function(req, res, next){
+
+    if(!req.body.vendor_username || !req.body.vendor_password ||  !req.body.vendor_name ||
+        !req.body.vendor_email || !req.body.vendor_phone || !req.body.vendor_address_line1 || !req.body.vendor_city ||
+        !req.body.vendor_postal_code || !req.body.vendor_country){
         res.status(401).json({
-            error_message: "REQUIRED FIELDS : (vendor_username, password, vendor_name, email, phone, address_line1, city, postal_code, country)",
+            error_message: "REQUIRED FIELDS : (vendor_username, vendor_password, vendor_name, vendor_email, vendor_phone, vendor_address_line1, vendor_city, vendor_postal_code, vendor_country)",
             user_error_message: "필수 항목을 모두 입력하십시오."
         });
-    }else if(req.body.vendor_username.length < 4 || req.body.vendor_username.length > 20 || req.body.password.length < 4 || req.body.password.length > 20 ||
-                req.body.phone.length > 20 || req.body.email.length > 30){
+    }else if(req.body.vendor_username.length < 4 || req.body.vendor_username.length > 20 || req.body.vendor_password.length < 4 || req.body.vendor_password.length > 20 ||
+                req.body.vendor_phone.length > 20 || req.body.vendor_email.length > 30){
         res.status(401).json({
             error_type: "Data Integrity Violation",
-            error_message: "입력하신 파라미터 글자 숫자를 참고하세요: vendor_username(4~20), password(4~20), phone(~20), email(~30)"
+            error_message: "입력하신 파라미터 글자 숫자를 참고하세요: vendor_username(4~20), vendor_password(4~20), vendor_phone(~20), vendor_email(~30)"
+        });
+    }
+
+    pool.getConnection(function(error,connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
+        } else{
+            connection.beginTransaction(function(err){
+                if (error){
+                    connection.release();
+                    next(error);
+                }
+                var hashedPassword = bcrypt.hashSync(req.body.vendor_password, parseInt(process.env.SALT_ROUNDS));
+                var registerString = squel.insert({separator:"\n"})
+                                         .into('vendors')
+                                         .set('vendor_username', req.body.vendor_username)
+                                         .set('vendor_password', hashedPassword)
+                                         .set('vendor_name', req.body.vendor_name)
+                                         .set('vendor_email', req.body.vendor_email)
+                                         .set('vendor_phone', req.body.vendor_phone)
+                                         .set('vendor_address_line1', req.body.vendor_address_line1)
+                                         .set('vendor_address_line2', req.body.vendor_address_line2)
+                                         .set('vendor_city', req.body.vendor_city)
+                                         .set('vendor_country', req.body.vendor_country)
+                                         .set('vendor_postal_code', req.body.vendor_postal_code)
+                                         .toString();
+                connection.query(registerString, function(error, results, fields){
+                    if(error){
+                        return connection.rollback(function() {
+                            connection.release();
+                            next(error);
+                        });
+                    }
+
+                    var requestString = squel.select({seperator:"\n"})
+                                            .from('vendors')
+                                            .field('vendor_username')
+                                            .field('vendor_name')
+                                            .where('vendor_id =?', results.insertId)
+                                            .toString();
+                    
+                    connection.query(requestString, function(error2, results2, fields2){ 
+                        if (error2){
+                            return connection.rollback(function() {
+                                connection.release();
+                                next(error2);
+                            });
+                        }
+                        
+                        var searchString = squel.select({seperator:"\n"})
+                                                .from('categories')
+                                                .field('MAX(rgt)', 'rgt')
+                                                .toString();
+                        
+                        connection.query(searchString, function(error3, results3, fields3){
+                            if (error3){
+                                return connection.rollback(function(){
+                                    connection.release();
+                                    next(error3);
+                                });
+                            }
+
+                            var insertString = squel.insert({seperator:"\n"})
+                                                    .into('categories')
+                                                    .set('vendor_id', results.insertId)
+                                                    .set('category_name', 'vendor_' + results.insertId)
+                                                    .set('lft', results3[0].rgt + 1)
+                                                    .set('rgt', results3[0].rgt + 2)
+                                                    .toString();
+                            
+                            connection.query(insertString, function(error4, results4, fields4){
+                                if (error4){
+                                    return connection.rollback(function(){
+                                        connection.release();
+                                        next(error4);
+                                    });
+                                }
+                                if (!!results2) {
+                                    jwt.sign({vendor_username: results2[0].vendor_username, 
+                                    vendor_id: results.insertId, vendor_name: results2[0].vendor_name},
+                                    process.env.VENDOR_SECRET_KEY, {expiresIn: '7d'}, 
+                                    function(error, token){
+                                        if (error){
+                                            return connection.rollback(function(){
+                                                connection.release();
+                                                next(error);
+                                            });
+                                        }
+                                        connection.commit(function(err){
+                                            if (error){
+                                                return connection.rollback(function(){
+                                                    connection.release();
+                                                    next(error);
+                                                });
+                                            }
+                                            connection.release();
+                                            res.status(200).json({
+                                                message: "회원가입이 완료되었습니다",
+                                                auth: true,
+                                                token: token
+                                            });
+                                        });
+                                    });
+                                } else{
+                                    connection.release();
+                                    res.status(401).json({
+                                        message: "Internal Server Error: Registration Failed"
+                                    });
+                                }
+                            });
+                        });
+                    });
+                });
+            });
+        }
+    });
+});
+
+//ONE INSERT
+router.post('/api/vendor/register', function(req, res){
+
+    if(!req.body.vendor_username || !req.body.vendor_password ||  !req.body.vendor_name ||
+        !req.body.vendor_email || !req.body.vendor_phone || !req.body.vendor_address_line1 || !req.body.vendor_city ||
+        !req.body.vendor_postal_code || !req.body.vendor_country){
+        res.status(401).json({
+            error_message: "REQUIRED FIELDS : (vendor_username, vendor_password, vendor_name, vendor_email, vendor_phone, vendor_address_line1, vendor_city, vendor_postal_code, vendor_country)",
+            user_error_message: "필수 항목을 모두 입력하십시오."
+        });
+    }else if(req.body.vendor_username.length < 4 || req.body.vendor_username.length > 20 || req.body.vendor_password.length < 4 || req.body.vendor_password.length > 20 ||
+                req.body.vendor_phone.length > 20 || req.body.vendor_email.length > 30){
+        res.status(401).json({
+            error_type: "Data Integrity Violation",
+            error_message: "입력하신 파라미터 글자 숫자를 참고하세요: vendor_username(4~20), vendor_password(4~20), vendor_phone(~20), vendor_email(~30)"
         });
     }
     else{
-        pool.getConnection(function(err, connection){
-            if(err){
+        pool.getConnection(function(error, connection){
+            if(error){
                 if(typeof connection !== 'undefined'){
                     connection.release();
                 }
-                res.status(500).json({
-                    error: err.message
-                });
+                next(error);
             }
             else{
-                var hashedPassword = bcrypt.hashSync(req.body.password, parseInt(process.env.SALT_ROUNDS));
+                var hashedPassword = bcrypt.hashSync(req.body.vendor_password, parseInt(process.env.SALT_ROUNDS));
                 // var clean_phone_number = req.body.phone_number.replace(/-/g,'');
                 var queryString = squel.insert({separator: "\n"})
                                        .into('vendors')
                                        .set('vendor_username', req.body.vendor_username)
-                                       .set('password', hashedPassword)
+                                       .set('vendor_password', hashedPassword)
                                        .set('vendor_name', req.body.vendor_name)
-                                       .set('email', req.body.email)
-                                       .set('phone', req.body.phone)
-                                       .set('address_line1', req.body.address_line1)
-                                       .set('address_line2', req.body.address_line2)
-                                       .set('city', req.body.city)
-                                       .set('postal_code', req.body.postal_code)
-                                       .set('country', req.body.country)
+                                       .set('vendor_email', req.body.vendor_email)
+                                       .set('vendor_phone', req.body.vendor_phone)
+                                       .set('vendor_address_line1', req.body.vendor_address_line1)
+                                       .set('vendor_address_line2', req.body.vendor_address_line2)
+                                       .set('vendor_city', req.body.vendor_city)
+                                       .set('vendor_postal_code', req.body.vendor_postal_code)
+                                       .set('vendor_country', req.body.vendor_country)
                                        .toString();
                 connection.query(queryString, function(error, results, fields){
                     connection.release();
                     if (error){
-                        res.status(500).json({
-                            code : "QUERY_ERROR POST /api/vendor/register",
-                            auth: false,
-                            token: null,
-                            error_message: error.message,
-                            stack: error.stack
-                        });     
+                        next(error);    
                     }
                     else{
-                        jwt.sign({vendor_username: req.body.vendorusername, vendor_id: results.vendor_id, vendor_name: req.body.vendor_name}, process.env.VENDOR_SECRET_KEY, {expiresIn: '7d'}, function(error, token){
+                        jwt.sign({vendor_username: req.body.vendor_username, vendor_id: results.vendor_id, vendor_name: req.body.vendor_name}, process.env.VENDOR_SECRET_KEY, {expiresIn: '7d'}, function(error, token){
                             if (error){
-                                res.status(500).json({
-                                    code: "JWT_SIGN_ERROR POST /api/register 벤더 사인",
-                                    auth: false,
-                                    token: null
-                                });
+                                next(error);
                             }
                             else{
                                 res.status(200).json({
@@ -410,15 +491,215 @@ router.post('/api/vendor/register', function(req, res){
     }   
 });
 
-router.get('/all_products', function(req, res, next){
-    pool.getConnection(function(err, connection){
-        if(err){
+
+
+// [from v1] Vendor: add new category
+router.post('/api/vendor/add_category', verifyVendorToken, function(req, res, next){
+    pool.getConnection(function(error,connection){
+        if(error){
             if(typeof connection !== 'undefined'){
                 connection.release();
             }
-            res.status(500).json({
-                error: err.message
+            next(error);
+        } else{
+            var newCategory = req.body;
+            var queryString;
+            console.log(newCategory);
+            if (!newCategory.parent_id){
+                queryString = squel.select({seperator:"\n"})
+                                   .from('categories')
+                                   .field('MIN(lft)', 'lft')
+                                   .field('MAX(rgt)', 'rgt')
+                                   .where('vendor_id = ?', req.vendor_id)
+                                   .toString();
+            } else{
+                queryString = squel.select({seperator:"\n"})
+                                   .from('categories')
+                                   .field('lft')
+                                   .field('rgt')
+                                   .where('category_id = ?', newCategory.parent_id)
+                                   .toString();
+            }
+
+            connection.query(queryString, function(error, results, fields){
+                if (error){
+                    connection.release();
+                    next(error);
+                }
+                connection.beginTransaction(function(error) {
+                    if (error){
+                        connection.release();
+                        next(error);
+                    }
+                    var lftUpdateQuery = squel.update({seperator:"\n"})
+                                              .table('categories')
+                                              .set('lft = lft + 2')
+                                              .where('lft > ?', results[0].rgt)
+                                              .toString();
+
+                    connection.query(lftUpdateQuery, function(error2, results2, fields2){
+                        if (error2){
+                            return connection.rollback(function(){
+                                connection.release();
+                                next(error2);
+                            });
+                        }
+
+                        var rgtUpdateQuery = squel.update({seperator:"\n"})
+                                                  .table('categories')
+                                                  .set('rgt = rgt + 2')
+                                                  .where('rgt > ?', (results[0].rgt-1))
+                                                  .toString();
+                        connection.query(rgtUpdateQuery, function(error3, results3, fields3){
+                            if (error3){
+                                return connection.rollback(function(){
+                                    connection.release();
+                                    next(error3);
+                                });
+                            }
+
+                            var insertQuery = squel.insert({seperator:"\n"})
+                                                   .into('categories')
+                                                   .set('vendor_id', req.vendor_id)
+                                                   .set('parent_id', newCategory.parent_id)
+                                                   .set('category_name', newCategory.category_name)
+                                                   .set('lft', results[0].rgt)
+                                                   .set('rgt', results[0].rgt + 1)
+                                                   .toString();
+                            connection.query(insertQuery, function(error4, results4, fields4){
+                                if (error4){
+                                    return connection.rollback(function() {
+                                        connection.release();
+                                        next(error);
+                                    });
+                                }
+                        
+                                connection.commit(function(error){
+                                    if (error){
+                                        return connection.rollback(function() {
+                                            connection.release();
+                                            next(error);
+                                        });
+                                    }
+                            
+                                    connection.release();
+                                    res.status(200).json({
+                                        message: "성공적으로 카테고리가 추가되었습니다"
+                                    });
+                                });
+                            });
+                        });
+                    });
+                });
             });
+        }
+    });
+});
+
+// [from v1] Vendor: delete category
+router.delete('/api/vendor/delete_category', verifyVendorToken, function(req, res, next){
+    pool.getConnection(function(error,connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
+        } else{
+            var queryString = squel.select({seperator:"\n"})
+                                   .from('categories')
+                                   .field('lft')
+                                   .field('rgt')
+                                   .where('category_id = ?', req.body.category_id)
+                                   .toString();
+            connection.query(queryString, function(error, results, fields){
+                if (error){
+                    connection.release();
+                    next(error);
+                } else{
+                    console.log(results[0]);
+                    var diff = results[0].rgt - results[0].lft;
+                    if (diff == 1){
+                        connection.beginTransaction(function(error){
+                            if (error){
+                                connection.release();
+                                next(error);
+                            }
+
+                            var deleteString = squel.delete({seperator:"\n"})
+                                                    .from('categories')
+                                                    .where('category_id =?', req.body.category_id)
+                                                    .toString();
+                            connection.query(deleteString, function(error2, results2, fields2){
+                                if (error2){
+                                    return connection.rollback(function() {
+                                        connection.release();
+                                        next(error);
+                                    });
+                                }
+
+                                var lftUpdateString = squel.update({seperator:"\n"})
+                                                        .table('categories')
+                                                        .set('lft = lft - 2')
+                                                        .where('lft > ?', results[0].rgt)
+                                                        .toString();
+                                connection.query(lftUpdateString, function(error3, results3, fields3){
+                                    if (error3){
+                                        return connection.rollback(function(){
+                                            connection.release();
+                                            next(error);
+                                        });
+                                    }
+
+                                    var rgtUpdateString = squel.update({seperator:"\n"})
+                                                               .table('categories')
+                                                               .set('rgt = rgt - 2')
+                                                               .where('rgt > ?', results[0].rgt)
+                                                               .toString();
+                                    connection.query(rgtUpdateString, function(error4, results4, fields4){
+                                        if (error4){
+                                            return connection.rollback(function(){
+                                                connection.release();
+                                                next(error);
+                                            });
+                                        }
+
+                                        connection.commit(function(error){
+                                            if (error){
+                                                return connection.rollback(function() {
+                                                    connection.release();
+                                                    next(error);
+                                                });
+                                            }
+                                    
+                                            connection.release();
+                                            res.status(200).json({
+                                                message: "성공적으로 카테고리가 제거되었습니다"
+                                            });
+                                        });
+                                    })
+                                });
+                            });
+                        });
+                    } else{
+                        connection.release();
+                        res.status(401).json({
+                            message: "하위 카테고리를 모두 삭제하셔야 합니다"
+                        });
+                    }
+                }
+            });
+        }
+    });
+});
+
+
+router.get('/all_products', function(req, res, next){
+    pool.getConnection(function(error, connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
         }
         else{
             var queryString = squel.select({separator:"\n"})
@@ -427,10 +708,7 @@ router.get('/all_products', function(req, res, next){
             connection.query(queryString, function(error, results, fields){
                 if(error){
                     connection.release();
-                    res.status(500).json({
-                        message: error.message,
-                        stack: error.stack
-                    });
+                    next(error);
                 }else{
                     connection.release();
                     res.status(200).json({
@@ -446,47 +724,10 @@ router.get('/all_products', function(req, res, next){
 });
 
 
-router.put('/api/vendor/add_category', verifyVendorToken, function(req, res, next){
-    pool.getConnection(function(err, connection){
-        if(err){
-            if(typeof connection !== 'undefined'){
-                connection.release();
-            }
-            res.status(500).json({
-                error: err.message
-            });
-        }
-        else{
-            var queryString = squel.insert({separator:"\n"})
-                                   .into('categories')
-                                   .set('category_name', req.body.category_name)
-                                   .toString();
-            connection.query(queryString, function(error, results, fields){
-                if(error){
-                    connection.release();
-                    res.status(500).json({
-                        message: error.message,
-                        stack: error.stack
-                    });
-                }else{
-                    connection.release();
-                    res.status(200).json({
-                        message: "성공적으로 해당 카테고리를 추가했습니다",
-                        results,
-                        fields
-                    });
-                    
-                }
-            });
-        }
-    });
-});
 
-
-
-router.use(function(err, req, res, next){   
+router.use(function(error, req, res, next){   
     
-    next(err);
+    next(error);
     
 });
 
@@ -575,7 +816,7 @@ function numberToMoney(number) {
         str = str.slice(0, -4);
         return str + '억' + second_four + first_four + '원';
     }else{
-        throw new Error("The number of digits cannot exceed 12. Try a smaller number");
+        throw new error("The number of digits cannot exceed 12. Try a smaller number");
     }
 }
 
