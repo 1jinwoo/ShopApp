@@ -22,7 +22,6 @@ const s3bucket = new AWS.S3({
     Bucket: BUCKET_NAME
 });
 
-
 const upload = multer({
     storage: multerS3({
         s3: s3bucket,
