@@ -22,6 +22,7 @@ const s3bucket = new AWS.S3({
     Bucket: BUCKET_NAME
 });
 
+
 const upload = multer({
     storage: multerS3({
         s3: s3bucket,
@@ -404,7 +405,7 @@ router.post('/api/vendor/register', function(req, res, next){
                                             }
                                             connection.release();
                                             res.status(200).json({
-                                                message: "회원가입이 완료되었습니다",
+                                                message: "회원가입이 완료되었습니다.",
                                                 auth: true,
                                                 token: token
                                             });
@@ -426,7 +427,7 @@ router.post('/api/vendor/register', function(req, res, next){
 });
 
 //ONE INSERT
-router.post('/api/vendor/register', function(req, res){
+router.post('/api/vendor/register', function(req, res, next){
 
     if(!req.body.vendor_username || !req.body.vendor_password ||  !req.body.vendor_name ||
         !req.body.vendor_email || !req.body.vendor_phone || !req.body.vendor_address_line1 || !req.body.vendor_city ||
@@ -503,8 +504,8 @@ router.post('/api/vendor/add_category', verifyVendorToken, function(req, res, ne
             next(error);
         } else{
             var newCategory = req.body;
+            console.log(req.body);
             var queryString;
-            console.log(newCategory);
             if (!newCategory.parent_id){
                 queryString = squel.select({seperator:"\n"})
                                    .from('categories')
@@ -686,6 +687,113 @@ router.delete('/api/vendor/delete_category', verifyVendorToken, function(req, re
                             message: "하위 카테고리를 모두 삭제하셔야 합니다"
                         });
                     }
+                }
+            });
+        }
+    });
+});
+
+
+// adding one single product
+router.post('/api/vendor/add_product', verifyVendorToken, function(res, req, next){
+    /*
+    {
+        "product_name":
+        "category_id":
+        "vendor_id":
+        "stock":
+        "price_original":
+        "price_discounted": (optional)
+        "tag": (optional)
+        "product description": (optional)
+    }
+    */
+    pool.getConnection(function(error, connection){
+        console.log(req.body);
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
+        } else {
+            console.log(req);
+            console.log(req.body);
+            var queryString = squel.insert({separator:"\n"})
+                                    .into('products')
+                                    .set('product_name', req.body.product_name)
+                                    .set('category_id', req.body.category_id)
+                                    .set('stock', req.body.stock)
+                                    .set('price_original', req.body.price_original)
+                                    .set('tag', req.body.tag)
+                                    .set('product description', req.body.product_description)
+                                    .toString();
+            connection.query(queryString, function(error, results, fields){
+                connection.release();
+                if(error){
+                    next(error);
+                } else {
+                    res.status(200).json({
+                        message: "성공적으로 새 상품들을 등록하였습니다.",
+                        results,
+                        fields
+                    });
+                }
+            });
+        }
+    });
+});
+
+
+// adding multiple products
+router.post('/api/vendor/add_products', verifyVendorToken, function(res, req, next){
+    /*
+    {
+        "products" : [
+        {"product_name":
+        "category_id":
+        "vendor_id":
+        "stock":
+        "price_original":
+        "price_discounted": (optional)
+        "tag": (optional)
+        "product description": (optional)},
+        {"product_name":
+        "category_id":
+        "vendor_id":
+        "stock":
+        "price_original":
+        "price_discounted": (optional)
+        "tag": (optional)
+        "product description": (optional)},
+        .
+        .
+        .
+        ]
+        
+    }
+    */
+    pool.getConnection(function(error, connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
+        } else {
+            var newProducts = req.body.products;
+            var queryString = squel.insert({separator:"\n"})
+                                    .into('products')
+                                    .setFieldsRows(newProducts)
+                                    .toString();
+            connection.query(queryString, function(error, results, fields){
+                connection.release();
+                if(error){
+                    next(error);
+                } else {
+                    res.status(200).json({
+                        message: "성공적으로 새 상품들을 등록하였습니다.",
+                        results,
+                        fields
+                    });
                 }
             });
         }
