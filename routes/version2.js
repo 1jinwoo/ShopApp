@@ -804,6 +804,66 @@ router.post('/api/vendor/add_products', verifyVendorToken, function(req, res, ne
     });
 });
 
+// Vendor: upload product images
+router.post('/api/vendor/upload_images', verifyVendorToken, upload.array('photo', 3), function(req, res, next) {
+    pool.getConnection(function(error, connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
+        } else{
+            var photosArray = [];
+            for (i = 0; i < req.files.length; i++){
+                photosArray.push({product_id: req.body.product_id,
+                                  image_pathname: req.files[i].key});
+            }
+            var uploadString = squel.insert({seperator:"\n"})
+                                    .into('product_images')
+                                    .setFieldsRows(photosArray)
+                                    .toString();
+            connection.query(uploadString, function(error, results, fields){
+                connection.release();
+                if (error){
+                    next(error);
+                } else{
+                    res.status(200).json({
+                        message: "이미지가 성공적으로 추가되었습니다"
+                    });
+                }
+            });
+        }
+    });
+});
+
+router.get('/api/get_products/:vendor_id', function(req, res, next){
+    pool.getConnection(function(error, connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
+        } else{
+            var queryString = squel.select({separator:"\n"})
+                                    .from('products')
+                                    .where('vendor_id = ?', req.params.vendor_id)
+                                    .toString();
+            connection.query(queryString, function(error, results, fields){
+                if(error){
+                    connection.release();
+                    next(error);
+                } else {
+                    connection.release();
+                    res.status(200).json({
+                        message: "성공적으로 해당 판매자의 상품들을 가져왔습니다.",
+                        results,
+                        fields
+                    });
+                }
+            });
+        }
+    });
+});
 
 router.get('/all_products', function(req, res, next){
     pool.getConnection(function(error, connection){
