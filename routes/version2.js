@@ -694,8 +694,8 @@ router.delete('/api/vendor/delete_category', verifyVendorToken, function(req, re
 });
 
 
-// adding one single product
-router.post('/api/vendor/add_product', verifyVendorToken, function(res, req, next){
+// Vendor: Add new product
+router.post('/api/vendor/add_product', verifyVendorToken, function(req, res, next){
     /*
     {
         "product_name":
@@ -709,34 +709,35 @@ router.post('/api/vendor/add_product', verifyVendorToken, function(res, req, nex
     }
     */
     pool.getConnection(function(error, connection){
-        console.log(req.body);
         if(error){
             if(typeof connection !== 'undefined'){
                 connection.release();
             }
             next(error);
-        } else {
-            console.log(req);
-            console.log(req.body);
+        } else{
+            var newProduct = req.body;
             var queryString = squel.insert({separator:"\n"})
-                                    .into('products')
-                                    .set('product_name', req.body.product_name)
-                                    .set('category_id', req.body.category_id)
-                                    .set('stock', req.body.stock)
-                                    .set('price_original', req.body.price_original)
-                                    .set('tag', req.body.tag)
-                                    .set('product description', req.body.product_description)
-                                    .toString();
+                                   .into('products')
+                                   .set('product_name', newProduct.product_name)
+                                   .set('category_id', newProduct.category_id)
+                                   .set('vendor_id', req.vendor_id)
+                                   .set('stock', newProduct.stock)
+                                   .set('price_original', newProduct.price_original)
+                                   .set('price_discounted', newProduct.price_discounted)
+                                   .set('tag', newProduct.tag)
+                                   .set('product_description', newProduct.product_description)
+                                   .toString();
             connection.query(queryString, function(error, results, fields){
                 connection.release();
                 if(error){
                     next(error);
-                } else {
+                }else{
                     res.status(200).json({
-                        message: "성공적으로 새 상품들을 등록하였습니다.",
+                        message: "성공적으로 새 상품을 등록하였습니다.",
                         results,
                         fields
                     });
+                    
                 }
             });
         }
@@ -744,8 +745,9 @@ router.post('/api/vendor/add_product', verifyVendorToken, function(res, req, nex
 });
 
 
-// adding multiple products
-router.post('/api/vendor/add_products', verifyVendorToken, function(res, req, next){
+// Vendor: Add new products
+router.post('/api/vendor/add_products', verifyVendorToken, function(req, res, next){
+
     /*
     {
         "products" : [
@@ -769,17 +771,18 @@ router.post('/api/vendor/add_products', verifyVendorToken, function(res, req, ne
         .
         .
         ]
-        
     }
     */
+
     pool.getConnection(function(error, connection){
         if(error){
             if(typeof connection !== 'undefined'){
                 connection.release();
             }
             next(error);
-        } else {
+        } else{
             var newProducts = req.body.products;
+            console.log(newProducts);
             var queryString = squel.insert({separator:"\n"})
                                     .into('products')
                                     .setFieldsRows(newProducts)
@@ -788,12 +791,13 @@ router.post('/api/vendor/add_products', verifyVendorToken, function(res, req, ne
                 connection.release();
                 if(error){
                     next(error);
-                } else {
+                }else{
                     res.status(200).json({
                         message: "성공적으로 새 상품들을 등록하였습니다.",
                         results,
                         fields
                     });
+                    
                 }
             });
         }
