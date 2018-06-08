@@ -836,7 +836,9 @@ router.post('/api/vendor/upload_images', verifyVendorToken, upload.array('photo'
     });
 });
 
-router.get('/api/get_products/:vendor_id', function(req, res, next){
+
+// get products by vendor_id
+router.get('/api/get_products_by_vendor/:vendor_id', function(req, res, next){
     pool.getConnection(function(error, connection){
         if(error){
             if(typeof connection !== 'undefined'){
@@ -856,6 +858,37 @@ router.get('/api/get_products/:vendor_id', function(req, res, next){
                     connection.release();
                     res.status(200).json({
                         message: "성공적으로 해당 판매자의 상품들을 가져왔습니다.",
+                        results,
+                        fields
+                    });
+                }
+            });
+        }
+    });
+});
+
+
+// get products by category_id
+router.get('/api/get_products_by_category/:category_id', function(req, res, next){
+    pool.getConnection(function(error, connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
+        } else{
+            var queryString = squel.select({separator:"\n"})
+                                    .from('products')
+                                    .where('category_id = ?', req.params.category_id)
+                                    .toString();
+            connection.query(queryString, function(error, results, fields){
+                if(error){
+                    connection.release();
+                    next(error);
+                } else {
+                    connection.release();
+                    res.status(200).json({
+                        message: "성공적으로 해당 카테고리의 상품들을 가져왔습니다.",
                         results,
                         fields
                     });
@@ -889,6 +922,140 @@ router.get('/all_products', function(req, res, next){
                         fields
                     });
                     
+                }
+            });
+        }
+    });
+});
+
+// Customer: make order (logged-in user)
+router.post('/api/order_products', verifyToken, function(req, res, next){
+    /*
+    {
+        "product_id":
+        "order_quantity":
+        "comments": (optional) 
+        "order_address_line1":
+        "order_address_line2": (optional)
+        "order_city":
+        "order_postal_code":
+        "order_country":
+        "order_phone":
+        "order_email":
+    }
+    */
+    pool.getConnection(function(error, connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
+        } else{
+            var checkString = squel.select({seperator:"\n"})
+                                   .from('products')
+                                   .field('stock')
+                                   .field('price_original')
+                                   .field('price_discounted')
+                                   .field('vendor_id')
+                                   .where('product_id = ?', req.body.product_id)
+                                   .toString();
+            connection.query(checkString, function(error, results, fields){
+                if (error){
+                    connection.release();
+                    next(error);
+                } else{
+                    if (results[0].stock < req.body.order_quantity){
+                        connection.release();
+                        res.status(401).json({
+                            message: "상품의 재고가 충분하지 않습니다"
+                        });
+                    } else{
+                        connection.beginTransaction(function(error){
+                            if(error){
+                                connection.release();
+                                next(error);
+                            }
+                            var newQuantity = results[0].stock - req.body.order_quantity;
+                            var updateString = squel.update({seperator:"\n"})
+                                                    .table('products')
+                                                    .set('stock', newQuantity)
+                                                    .where('product_id = ?', req.body.product_id)
+                                                    .toString();
+                            
+                            connection.query(updateString, function(error2, results2, fields2){
+                                if (error2){
+                                    return connection.rollback(function(){
+                                        connection.release();
+                                        next(error2);
+                                    });
+                                }
+
+                                var individualPrice;    // checking if there is a discount
+                                if (!results[0].price_discounted){
+                                    individualPrice = results[0].price_original;
+                                } else{
+                                    individualPrice = results[0].price_discounted;
+                                }
+
+                                var totalPrice = individualPrice * req.body.order_quantity;
+                                var insertString = squel.insert({seperator:"\n"})
+                                                        .into('orders')
+                                                        .set('product_id', req.body.product_id)
+                                                        .set('customer_id', req.customer_id)
+                                                        .set('vendor_id', results[0].vendor_id)
+                                                        .set('order_quantity', req.body.order_quantity)
+                                                        .set('price_each', individualPrice)
+                                                        .set('price_total', totalPrice)
+                                                        .set('order_date', 'NOW()')
+                                                        .set('order_status', 'ordered')
+                                                        .set('comments', req.body.comments)
+                                                        .set('order_address_line1', req.body.order_address_line1)
+                                                        .set('order_address_line2', req.body.order_address_line2)
+                                                        .set('order_city', req.body.order_city)
+                                                        .set('order_country', req.body.order_country)
+                                                        .set('order_postal_code', req.body.order_postal_code)
+                                                        .set('order_phone', req.body.order_phone)
+                                                        .set('order_email', req.body.order_email)
+                                                        .toString();
+                                connection.query(insertString, function(error3, results3, fields3){
+                                    if (error3){
+                                        return connection.rollback(function(){
+                                            connection.release();
+                                            next(error3);
+                                        });
+                                    }
+                                    
+                                    var paymentString = squel.insert({seperator:"\n"})
+                                                             .into('payments')
+                                                             .set('customer_id', req.customer_id)
+                                                             .set('order_id', results3.insertId)
+                                                             .set('payment_date', 'NOW()')
+                                                             .set('payment_amount', totalPrice)
+                                                             .toString();
+                                    connection.query(paymentString, function(error4, results4, fields4){
+                                        if (error4){
+                                            return connection.rollback(function(){
+                                                connection.release();
+                                                next(error4);
+                                            });
+                                        }
+                                        connection.commit(function(error){
+                                            if (error){
+                                                return connection.rollback(function(){
+                                                    connection.release();
+                                                    next(error);
+                                                });
+                                            }
+                                            connection.release();
+                                            res.status(200).json({
+                                                message: "주문이 성공적으로 완료되었습니다",
+                                            });
+                                        });
+                                    });
+                                });
+                            });
+                        });
+                    }
                 }
             });
         }
