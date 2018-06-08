@@ -585,7 +585,7 @@ router.post('/api/vendor/add_category', verifyVendorToken, function(req, res, ne
                             
                                     connection.release();
                                     res.status(200).json({
-                                        message: "성공적으로 카테고리가 추가되었습니다"
+                                        message: "성공적으로 카테고리가 추가되었습니다."
                                     });
                                 });
                             });
@@ -674,7 +674,7 @@ router.delete('/api/vendor/delete_category', verifyVendorToken, function(req, re
                                     
                                             connection.release();
                                             res.status(200).json({
-                                                message: "성공적으로 카테고리가 제거되었습니다"
+                                                message: "성공적으로 카테고리가 제거되었습니다."
                                             });
                                         });
                                     })
@@ -684,7 +684,7 @@ router.delete('/api/vendor/delete_category', verifyVendorToken, function(req, re
                     } else{
                         connection.release();
                         res.status(401).json({
-                            message: "하위 카테고리를 모두 삭제하셔야 합니다"
+                            message: "하위 카테고리를 모두 삭제하셔야 합니다."
                         });
                     }
                 }
@@ -828,7 +828,7 @@ router.post('/api/vendor/upload_images', verifyVendorToken, upload.array('photo'
                     next(error);
                 } else{
                     res.status(200).json({
-                        message: "이미지가 성공적으로 추가되었습니다"
+                        message: "이미지가 성공적으로 추가되었습니다."
                     });
                 }
             });
