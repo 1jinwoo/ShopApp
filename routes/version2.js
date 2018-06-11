@@ -57,7 +57,8 @@ router.post('/upload', upload.array('photo', 3), function(req, res, next) {
     });
 })
 
-//NO INSERT
+
+// customer login
 router.post('/api/login', function(req, res){
     if (!req.body.username || !req.body.password){
         res.status(401).json({
@@ -132,7 +133,8 @@ router.post('/api/login', function(req, res){
     }
 });
 
-//ONE INSERT
+
+// customer registration
 router.post('/api/register', function(req, res){
     /*
     {
@@ -142,11 +144,11 @@ router.post('/api/register', function(req, res){
         "customer_first_name":
         "customer_email":
         "customer_phone":
-        "address_line1":
-        "address_line2": (optional)
-        "city":
-        "postal_code":
-        "country":
+        "customer_address_line1":
+        "customer_address_line2": (optional)
+        "customer_city":
+        "customer_postal_code":
+        "customer_citycountry":
     }
     */
     if(!req.body.username || !req.body.password || !req.body.customer_last_name || !req.body.customer_first_name  || !req.body.customer_phone || !req.body.customer_address_line1 || !req.body.customer_city ||
@@ -213,11 +215,106 @@ router.post('/api/register', function(req, res){
     }   
 });
 
-//NO INSERT
-router.post('/api/vendor/login', function(req, res){
+
+// customer change password
+router.put('/api/change_password', verifyToken, function(req, res, next){
+    /*
+    {
+        "password": (current password)
+        "new_password":
+        "new_password_confirm":
+    }
+    */
+    if(!req.body.password){
+        res.status(401).json({
+            error_message: "REQUIRED FIELD omitted",
+            user_error_message: "비밀번호를 입력해주십시오."
+        });
+    }
+
+    if(!req.body.new_password || !new_password_confirm){
+        res.status(401).json({
+            error_message: "REQUIRED FIELDS: (new_password, new_password_confirm) ",
+            user_error_message: "새로운 비밀번호와 비밀번호 확인을 입력해주십시오."
+        });
+    }
+    if(req.body.new_password.length < 4 || req.body.new_password.length > 20){
+        res.status(401).json({
+            error_type: "Date Integrity Violation",
+            error_message: "비밀번호는 4자리 이상 20자리 이하로 설정해주세요."
+        });
+    }
+
+    pool.getConnection(function(error,connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
+        } else{
+            var queryString = squel.select({seperator:"\n"})
+                                   .from('customers')
+                                   .field('password')
+                                   .where('username = ?', req.username)
+                                   .where('customer_id = ?', req.customer_id)
+                                   .toString();
+            connection.query(queryString, function(error, results, fields){
+                if (error){
+                    connection.release();
+                    next(error);
+                } else{
+                    var isValid = bcrypt.compareSync(req.body.password, results[0].password);
+                    if (isValid){
+                        if (req.body.new_password !== req.body.new_password_confirm){
+                            connection.release();
+                            res.status(401).json({
+                                status: "새로운 비밀번호와 비밀번호 확인이 일치하지 않습니다.",
+
+                            });
+                        } else{
+                            if (req.body.password === req.body.new_password){
+                                connection.release();
+                                res.status(401).json({
+                                    status: "새로운 비밀번호를 현재 비밀번호와 다르게 설정하세요."
+                                });
+                            } else{
+                                var newPwHashed = bcrypt.hashSync(req.body.new_password, parseInt(process.env.SALT_ROUNDS));
+                                var changeQuery = squel.update({seperator:"\n"})
+                                                       .table('customers')
+                                                       .set('password', newPwHashed)
+                                                       .where('username = ?', req.username)
+                                                       .where('customer_id = ?', req.customer_id)
+                                                       .toString();
+                                connection.query(changeQuery, function(error2, results2, fields2){
+                                    connection.release();
+                                    if (error2){
+                                        next(error2);
+                                    } else{
+                                        res.status(200).json({
+                                            message: "비밀번호가 성공적으로 변경되었습니다"
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                    } else{
+                        connection.release();
+                        res.status(401).json({
+                            message: '입력하신 비밀번호가 일치하지 않습니다'
+                        });
+                    }
+                }
+            });
+        }
+    });
+});
+
+
+// vendor login
+router.post('/vendor/login', function(req, res){
     if (!req.body.vendor_username || !req.body.vendor_password){
         res.status(401).json({
-            error_message: "REQUIRED FIELDS : (username, password)",
+            error_message: "REQUIRED FIELDS : (vendor_username, vendor_password)",
             user_error_message: "필수 항목을 모두 입력하십시오."
         });
     }
@@ -290,8 +387,8 @@ router.post('/api/vendor/login', function(req, res){
 });
 
 
-// Vendor: register new vendor data using hash function
-router.post('/api/vendor/register', function(req, res, next){
+// vendor registration
+router.post('/vendor/register', function(req, res, next){
 
     if(!req.body.vendor_username || !req.body.vendor_password ||  !req.body.vendor_name ||
         !req.body.vendor_email || !req.body.vendor_phone || !req.body.vendor_address_line1 || !req.body.vendor_city ||
@@ -426,76 +523,104 @@ router.post('/api/vendor/register', function(req, res, next){
     });
 });
 
-//ONE INSERT
-router.post('/api/vendor/register', function(req, res, next){
 
-    if(!req.body.vendor_username || !req.body.vendor_password ||  !req.body.vendor_name ||
-        !req.body.vendor_email || !req.body.vendor_phone || !req.body.vendor_address_line1 || !req.body.vendor_city ||
-        !req.body.vendor_postal_code || !req.body.vendor_country){
+// vendor change password
+router.put('/vendor/change_password', verifyVendorToken, function(req, res, next){
+    /*
+    {
+        "vendor_password": (current vendor password)
+        "new_password":
+        "new_password_confirm"
+    }
+    */
+
+    if(!req.body.vendor_password){
         res.status(401).json({
-            error_message: "REQUIRED FIELDS : (vendor_username, vendor_password, vendor_name, vendor_email, vendor_phone, vendor_address_line1, vendor_city, vendor_postal_code, vendor_country)",
-            user_error_message: "필수 항목을 모두 입력하십시오."
-        });
-    }else if(req.body.vendor_username.length < 4 || req.body.vendor_username.length > 20 || req.body.vendor_password.length < 4 || req.body.vendor_password.length > 20 ||
-                req.body.vendor_phone.length > 20 || req.body.vendor_email.length > 30){
-        res.status(401).json({
-            error_type: "Data Integrity Violation",
-            error_message: "입력하신 파라미터 글자 숫자를 참고하세요: vendor_username(4~20), vendor_password(4~20), vendor_phone(~20), vendor_email(~30)"
+            error_message: "REQUIRED FIELD vendor_password not entered",
+            user_error_message: "벤더 비밀번호가 입력되지 않았습니다."
         });
     }
-    else{
-        pool.getConnection(function(error, connection){
-            if(error){
-                if(typeof connection !== 'undefined'){
-                    connection.release();
-                }
-                next(error);
+    if(!req.body.new_password || !req.body.new_password_confirm){
+        res.status(401).json({
+            error_message: "REQUIRED FIELDS: (new_password, new_password_confirm)",
+            user_error_message: "새로운 비밀번호와 비밀번호확인을 입력해주십시오."
+        });
+    }
+    if(req.body.new_password.length < 4 || req.body.new_password.length > 20){
+        res.status(401).json({
+            error_type: "Date Integrity Violation",
+            error_message: "비밀번호는 4자리 이상 20자리 이하로 설정해주세요."
+        });
+    }
+
+    pool.getConnection(function(error,connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
             }
-            else{
-                var hashedPassword = bcrypt.hashSync(req.body.vendor_password, parseInt(process.env.SALT_ROUNDS));
-                // var clean_phone_number = req.body.phone_number.replace(/-/g,'');
-                var queryString = squel.insert({separator: "\n"})
-                                       .into('vendors')
-                                       .set('vendor_username', req.body.vendor_username)
-                                       .set('vendor_password', hashedPassword)
-                                       .set('vendor_name', req.body.vendor_name)
-                                       .set('vendor_email', req.body.vendor_email)
-                                       .set('vendor_phone', req.body.vendor_phone)
-                                       .set('vendor_address_line1', req.body.vendor_address_line1)
-                                       .set('vendor_address_line2', req.body.vendor_address_line2)
-                                       .set('vendor_city', req.body.vendor_city)
-                                       .set('vendor_postal_code', req.body.vendor_postal_code)
-                                       .set('vendor_country', req.body.vendor_country)
-                                       .toString();
-                connection.query(queryString, function(error, results, fields){
+            next(error);
+        } else{
+            var queryString = squel.select({seperator:"\n"})
+                                   .from('vendors')
+                                   .field('vendor_password')
+                                   .where('vendor_id = ?', req.vendor_id)
+                                   .toString();
+            connection.query(queryString, function(error, results, fields){
+                if (error){
                     connection.release();
-                    if (error){
-                        next(error);    
-                    }
-                    else{
-                        jwt.sign({vendor_username: req.body.vendor_username, vendor_id: results.vendor_id, vendor_name: req.body.vendor_name}, process.env.VENDOR_SECRET_KEY, {expiresIn: '7d'}, function(error, token){
-                            if (error){
-                                next(error);
-                            }
-                            else{
-                                res.status(200).json({
-                                    auth: true,
-                                    token: token,
-                                    results: results
+                    res.status(500).json({
+                        message: error.message,
+                        stack: error.stack
+                    });
+                } else{
+                    var isValid = bcrypt.compareSync(req.body.vendor_password, results[0].vendor_password);
+                    if (isValid){
+                        if (req.body.new_password !== req.body.new_password_confirm){
+                            connection.release();
+                            res.status(401).json({
+                                status: "새로운 비밀번호와 비밀번호확인이 일치하지 않습니다.",
+
+                            });
+                        } else{
+                            if (req.body.vendor_password === req.body.new_password){
+                                connection.release();
+                                res.status(401).json({
+                                    status: "새로운 비밀번호를 현재 비밀번호와 다르게 설정하세요."
+                                });
+                            } else{
+                                var newPwHashed = bcrypt.hashSync(req.body.new_password, 10);
+                                var changeQuery = squel.update({seperator:"\n"})
+                                                       .table('vendors')
+                                                       .set('vendor_password', newPwHashed)
+                                                       .where('vendor_id = ?', req.vendor_id)
+                                                       .toString();
+                                connection.query(changeQuery, function(error2, results2, fields2){
+                                    connection.release();
+                                    if (error2){
+                                        next(error2);
+                                    } else{
+                                        res.status(200).json({
+                                            message: "비밀번호가 성공적으로 변경되었습니다."
+                                        });
+                                    }
                                 });
                             }
+                        }
+                    } else{
+                        connection.release();
+                        res.status(401).json({
+                            message: '입력하신 비밀번호가 일치하지 않습니다.'
                         });
-                    }   
-                });
-            }
-        });
-    }   
+                    }
+                }
+            });
+        }
+    });
 });
 
 
-
 // [from v1] Vendor: add new category
-router.post('/api/vendor/add_category', verifyVendorToken, function(req, res, next){
+router.post('/vendor/add_category', verifyVendorToken, function(req, res, next){
     pool.getConnection(function(error,connection){
         if(error){
             if(typeof connection !== 'undefined'){
@@ -504,7 +629,6 @@ router.post('/api/vendor/add_category', verifyVendorToken, function(req, res, ne
             next(error);
         } else{
             var newCategory = req.body;
-            console.log(req.body);
             var queryString;
             if (!newCategory.parent_id){
                 queryString = squel.select({seperator:"\n"})
@@ -597,8 +721,9 @@ router.post('/api/vendor/add_category', verifyVendorToken, function(req, res, ne
     });
 });
 
+
 // [from v1] Vendor: delete category
-router.delete('/api/vendor/delete_category', verifyVendorToken, function(req, res, next){
+router.delete('/vendor/delete_category', verifyVendorToken, function(req, res, next){
     pool.getConnection(function(error,connection){
         if(error){
             if(typeof connection !== 'undefined'){
@@ -695,13 +820,13 @@ router.delete('/api/vendor/delete_category', verifyVendorToken, function(req, re
 
 
 // Vendor: Add new product
-router.post('/api/vendor/add_product', verifyVendorToken, function(req, res, next){
+router.post('/vendor/add_product', verifyVendorToken, function(req, res, next){
     /*
     {
         "product_name":
         "category_id":
         "vendor_id":
-        "stock":
+        "stock_quantity":
         "price_original":
         "price_discounted": (optional)
         "tag": (optional)
@@ -721,7 +846,7 @@ router.post('/api/vendor/add_product', verifyVendorToken, function(req, res, nex
                                    .set('product_name', newProduct.product_name)
                                    .set('category_id', newProduct.category_id)
                                    .set('vendor_id', req.vendor_id)
-                                   .set('stock', newProduct.stock)
+                                   .set('stock_quantity', newProduct.stock_quantity)
                                    .set('price_original', newProduct.price_original)
                                    .set('price_discounted', newProduct.price_discounted)
                                    .set('tag', newProduct.tag)
@@ -746,7 +871,7 @@ router.post('/api/vendor/add_product', verifyVendorToken, function(req, res, nex
 
 
 // Vendor: Add new products
-router.post('/api/vendor/add_products', verifyVendorToken, function(req, res, next){
+router.post('/vendor/add_products', verifyVendorToken, function(req, res, next){
 
     /*
     {
@@ -754,7 +879,7 @@ router.post('/api/vendor/add_products', verifyVendorToken, function(req, res, ne
         {"product_name":
         "category_id":
         "vendor_id":
-        "stock":
+        "stock_quantity":
         "price_original":
         "price_discounted": (optional)
         "tag": (optional)
@@ -762,7 +887,7 @@ router.post('/api/vendor/add_products', verifyVendorToken, function(req, res, ne
         {"product_name":
         "category_id":
         "vendor_id":
-        "stock":
+        "stock_quantity":
         "price_original":
         "price_discounted": (optional)
         "tag": (optional)
@@ -804,8 +929,9 @@ router.post('/api/vendor/add_products', verifyVendorToken, function(req, res, ne
     });
 });
 
+
 // Vendor: upload product images
-router.post('/api/vendor/upload_images', verifyVendorToken, upload.array('photo', 3), function(req, res, next) {
+router.post('/vendor/upload_images', verifyVendorToken, upload.array('photo', 3), function(req, res, next) {
     pool.getConnection(function(error, connection){
         if(error){
             if(typeof connection !== 'undefined'){
@@ -838,28 +964,62 @@ router.post('/api/vendor/upload_images', verifyVendorToken, upload.array('photo'
 
 
 // get products by vendor_id
-router.get('/api/get_products_by_vendor/:vendor_id', function(req, res, next){
+router.get('/api/get_products_by_vendor_id/:vendor_id', function(req, res, next){
     pool.getConnection(function(error, connection){
         if(error){
             if(typeof connection !== 'undefined'){
                 connection.release();
             }
             next(error);
-        } else{
-            var queryString = squel.select({separator:"\n"})
-                                    .from('products')
-                                    .where('vendor_id = ?', req.params.vendor_id)
-                                    .toString();
-            connection.query(queryString, function(error, results, fields){
+        } else {
+            connection.beginTransaction(function(error){
                 if(error){
-                    connection.release();
-                    next(error);
+                    connection.rollback(function(){
+                        connection.release();
+                        next(error);
+                    });
                 } else {
-                    connection.release();
-                    res.status(200).json({
-                        message: "성공적으로 해당 판매자의 상품들을 가져왔습니다.",
-                        results,
-                        fields
+                    var updateString = squel.update({separator:"\n"})
+                                            .table('products')
+                                            .set('view_count = view_count + 1')
+                                            .where('vendor_id = ?', req.params.vendor_id)
+                                            .toString();
+                    connection.query(updateString, function(error, results, fields){
+                        if(error){
+                            connection.rollback(function(){
+                                connection.release();
+                                next(error);
+                            });
+                        } else {
+                            var queryString = squel.select({sepearator:"\n"})
+                                                    .from('products')
+                                                    .where('vendor_id = ?', req.params.vendor_id)
+                                                    .toString();
+                            connection.query(queryString, function(error, results, fields){
+                                if(error){
+                                    connection.rollback(function(){
+                                        connection.release();
+                                        next(error);
+                                    });
+                                } else {
+                                    connection.commit(function(error){
+                                        if(error){
+                                            connection.rollback(function(error){
+                                                connection.release();
+                                                next(error);
+                                            });
+                                        } else {
+                                            connection.release();
+                                            res.status(200).json({
+                                                message: "성공적으로 해당 판매자의 상품들을 가져왔습니다.",
+                                                results,
+                                                fields
+                                            });
+                                        }
+                                    });
+                                }
+                            });
+                        }
                     });
                 }
             });
@@ -869,28 +1029,62 @@ router.get('/api/get_products_by_vendor/:vendor_id', function(req, res, next){
 
 
 // get products by category_id
-router.get('/api/get_products_by_category/:category_id', function(req, res, next){
+router.get('/api/get_products_by_category_id/:category_id', function(req, res, next){
     pool.getConnection(function(error, connection){
         if(error){
             if(typeof connection !== 'undefined'){
                 connection.release();
             }
             next(error);
-        } else{
-            var queryString = squel.select({separator:"\n"})
-                                    .from('products')
-                                    .where('category_id = ?', req.params.category_id)
-                                    .toString();
-            connection.query(queryString, function(error, results, fields){
+        } else {
+            connection.beginTransaction(function(error){
                 if(error){
-                    connection.release();
-                    next(error);
+                    connection.rollback(function(){
+                        connection.release();
+                        next(error);
+                    });
                 } else {
-                    connection.release();
-                    res.status(200).json({
-                        message: "성공적으로 해당 카테고리의 상품들을 가져왔습니다.",
-                        results,
-                        fields
+                    var updateString = squel.update({separator:"\n"})
+                                            .table('products')
+                                            .set('view_count = view_count + 1')
+                                            .where('category_id = ?', req.params.category_id)
+                                            .toString();
+                    connection.query(updateString, function(error, results, fields){
+                        if(error){
+                            connection.rollback(function(){
+                                connection.release();
+                                next(error);
+                            });
+                        } else {
+                            var queryString = squel.select({sepearator:"\n"})
+                                                    .from('products')
+                                                    .where('category_id = ?', req.params.category_id)
+                                                    .toString();
+                            connection.query(queryString, function(error, results, fields){
+                                if(error){
+                                    connection.rollback(function(){
+                                        connection.release();
+                                        next(error);
+                                    });
+                                } else {
+                                    connection.commit(function(error){
+                                        if(error){
+                                            connection.rollback(function(error){
+                                                connection.release();
+                                                next(error);
+                                            });
+                                        } else {
+                                            connection.release();
+                                            res.status(200).json({
+                                                message: "성공적으로 해당 카테고리의 상품들을 가져왔습니다.",
+                                                results,
+                                                fields
+                                            });
+                                        }
+                                    });
+                                }
+                            });
+                        }
                     });
                 }
             });
@@ -898,7 +1092,9 @@ router.get('/api/get_products_by_category/:category_id', function(req, res, next
     });
 });
 
-router.get('/all_products', function(req, res, next){
+
+// get all products (does not increment view counts)
+router.get('/api/all_products', function(req, res, next){
     pool.getConnection(function(error, connection){
         if(error){
             if(typeof connection !== 'undefined'){
@@ -928,7 +1124,7 @@ router.get('/all_products', function(req, res, next){
     });
 });
 
-// Customer: make order (logged-in user)
+// customer places an order
 router.post('/api/order_products', verifyToken, function(req, res, next){
     /*
     {
@@ -953,7 +1149,7 @@ router.post('/api/order_products', verifyToken, function(req, res, next){
         } else{
             var checkString = squel.select({seperator:"\n"})
                                    .from('products')
-                                   .field('stock')
+                                   .field('stock_quantity')
                                    .field('price_original')
                                    .field('price_discounted')
                                    .field('vendor_id')
@@ -964,10 +1160,10 @@ router.post('/api/order_products', verifyToken, function(req, res, next){
                     connection.release();
                     next(error);
                 } else{
-                    if (results[0].stock < req.body.order_quantity){
+                    if (results[0].stock_quantity < req.body.order_quantity){
                         connection.release();
                         res.status(401).json({
-                            message: "상품의 재고가 충분하지 않습니다"
+                            message: "상품의 재고가 충분하지 않습니다."
                         });
                     } else{
                         connection.beginTransaction(function(error){
@@ -975,10 +1171,10 @@ router.post('/api/order_products', verifyToken, function(req, res, next){
                                 connection.release();
                                 next(error);
                             }
-                            var newQuantity = results[0].stock - req.body.order_quantity;
+                            var newQuantity = results[0].stock_quantity - req.body.order_quantity;
                             var updateString = squel.update({seperator:"\n"})
                                                     .table('products')
-                                                    .set('stock', newQuantity)
+                                                    .set('stock_quantity', newQuantity)
                                                     .where('product_id = ?', req.body.product_id)
                                                     .toString();
                             
@@ -1038,6 +1234,19 @@ router.post('/api/order_products', verifyToken, function(req, res, next){
                                                 next(error4);
                                             });
                                         }
+                                        var incrementString = squel.update({seperator:"\n"})
+                                                                    .table('products')
+                                                                    .set('order_count = order_count + 1')
+                                                                    .where('product_id = ?', req.body.product_id)
+                                                                    .toString();
+                                        connection.query(incrementString, function(error, results, fields){
+                                            if (error){
+                                                return connection.rollback(function(){
+                                                    connection.release();
+                                                    next(error);
+                                                });
+                                            }
+                                        });
                                         connection.commit(function(error){
                                             if (error){
                                                 return connection.rollback(function(){
@@ -1047,7 +1256,7 @@ router.post('/api/order_products', verifyToken, function(req, res, next){
                                             }
                                             connection.release();
                                             res.status(200).json({
-                                                message: "주문이 성공적으로 완료되었습니다",
+                                                message: "주문이 성공적으로 완료되었습니다.",
                                             });
                                         });
                                     });
@@ -1061,6 +1270,7 @@ router.post('/api/order_products', verifyToken, function(req, res, next){
     });
 });
 
+// guest places an order
 router.post('/api/order_products/guest', function(req, res, next){
     /*
     {
@@ -1076,7 +1286,7 @@ router.post('/api/order_products/guest', function(req, res, next){
         "order_email":
     }
     */
-    pool.getConnection(function(error,connection){
+    pool.getConnection(function(error, connection){
         if(error){
             if(typeof connection !== 'undefined'){
                 connection.release();
@@ -1085,7 +1295,7 @@ router.post('/api/order_products/guest', function(req, res, next){
         } else{
             var checkString = squel.select({seperator:"\n"})
                                    .from('products')
-                                   .field('stock')
+                                   .field('stock_quantity')
                                    .field('price_original')
                                    .field('price_discounted')
                                    .field('vendor_id')
@@ -1096,7 +1306,7 @@ router.post('/api/order_products/guest', function(req, res, next){
                     connection.release();
                     next(error);
                 } else{
-                    if (results[0].stock < req.body.order_quantity){
+                    if (results[0].stock_quantity < req.body.order_quantity){
                         connection.release();
                         res.status(401).json({
                             message: "상품의 재고가 충분하지 않습니다"
@@ -1107,10 +1317,10 @@ router.post('/api/order_products/guest', function(req, res, next){
                                 connection.release();
                                 next(error);
                             }
-                            var newQuantity = results[0].stock - req.body.order_quantity;
+                            var newQuantity = results[0].stock_quantity - req.body.order_quantity;
                             var updateString = squel.update({seperator:"\n"})
                                                     .table('products')
-                                                    .set('stock', newQuantity)
+                                                    .set('stock_quantity', newQuantity)
                                                     .where('product_id =?', req.body.product_id)
                                                     .toString();
                             
@@ -1168,6 +1378,19 @@ router.post('/api/order_products/guest', function(req, res, next){
                                                 next(error3);
                                             });
                                         }
+                                        var incrementString = squel.update({seperator:"\n"})
+                                                                    .table('products')
+                                                                    .set('order_count = order_count + 1')
+                                                                    .where('product_id = ?', req.body.product_id)
+                                                                    .toString();
+                                        connection.query(incrementString, function(error, results, fields){
+                                            if (error){
+                                                return connection.rollback(function(){
+                                                    connection.release();
+                                                    next(error);
+                                                });
+                                            }
+                                        });
                                         connection.commit(function(error){
                                             if (error){
                                                 return connection.rollback(function(){
@@ -1190,6 +1413,38 @@ router.post('/api/order_products/guest', function(req, res, next){
         }
     });
 });
+
+// processes a payment (TODO: need to add actual payment transaction)
+router.delete('/api/process_payment', function(req, res, next){
+    pool.getConnection(function(error, connection){
+        if(error){
+            if(typeof connection !== 'undefined'){
+                connection.release();
+            }
+            next(error);
+        }
+        else {
+            var queryString = squel.delete({separator: "\n"})
+                                    .from(payments)
+                                    .where("order_id = ?", req.body.order_id)
+                                    .toString();
+            connection.query(queryString, function(error, results, fields){
+                connection.release();
+                if(error){
+                    next(error);
+                }
+                else {
+                    res.status(201).json({
+                        message: "성공적으로 지불되었습니다.",
+                        results,
+                        fields
+                    });
+                }
+            });
+        }
+    });
+});
+
 
 router.use(function(error, req, res, next){   
     
