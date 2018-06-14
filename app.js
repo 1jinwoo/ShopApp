@@ -30,7 +30,14 @@ app.use(cookieParser());
 app.use('/v1', versionOne);
 app.use('/v2', versionTwo);
 
+app.use(function(err, req,res,next){
+	console.error(err);
+	next(err);
+});
+
+//Route중에 아무것도 없었을때 여기로 와서 404와 메세지 받아서감.
 app.use(function(err,req,res,next){
+	//error handling 
 	if (err){
 		next(err);
 	}
@@ -41,14 +48,15 @@ app.use(function(err,req,res,next){
 	}
 });
 
+
 app.use(function(error,req,res,next){
-    res.status(error.status || 500);
-    res.json({
-        error:{
-			message: error.message,
-			stack: error.stack,
-        }
-    });
+	if(process.env.NODE_ENV == "PRODUCTION"){
+		error.stack = null;
+	}
+	res.status(error.status || 500);
+	res.json({
+		error: error
+	});    
 });
 
 module.exports = app;
